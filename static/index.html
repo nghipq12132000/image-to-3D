@@ -182,19 +182,39 @@
         </div>
 
         <!-- Tùy chọn tiền xử lý & hậu xử lý -->
-        <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-700/60 text-xs">
-          <div>
-            <label class="text-[11px] text-slate-400 block mb-0.5">Chế độ tách nền:</label>
-            <select id="selectMaskMode" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 outline-none">
-              <option value="auto">Tự động (GrabCut / Alpha)</option>
-              <option value="full">Giữ toàn bộ khung ảnh</option>
-            </select>
+        <div class="space-y-2 pt-1.5 border-t border-slate-700/60 text-xs">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-[11px] text-slate-400 block mb-0.5">Chế độ tách nền:</label>
+              <select id="selectMaskMode" onchange="updateLiveMaskPreview()" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 outline-none">
+                <option value="auto">Tự động (Khử bóng &amp; Sàn gỗ)</option>
+                <option value="indoor">Ảnh trong nhà (Giữ khe ghế)</option>
+                <option value="studio">Nền đơn sắc / Studio Catalog</option>
+                <option value="full">Giữ toàn bộ khung ảnh</option>
+              </select>
+            </div>
+            <div class="flex items-end pb-1">
+              <label class="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-300">
+                <input id="chkEdgePruning" type="checkbox" class="rounded accent-sky-500" />
+                <span>Cắt tỉa cạnh (Edge Pruning)</span>
+              </label>
+            </div>
           </div>
-          <div class="flex items-end pb-1">
-            <label class="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-300">
-              <input id="chkEdgePruning" type="checkbox" class="rounded accent-sky-500" />
-              <span>Cắt tỉa cạnh (Edge Pruning)</span>
-            </label>
+
+          <!-- Thanh trượt tinh chỉnh độ nhạy tách Mask thời gian thực -->
+          <div class="bg-slate-900/70 px-2.5 py-1.5 rounded-lg border border-slate-800 flex items-center gap-2">
+            <span class="text-[11px] text-slate-400 shrink-0">Độ nhạy Mask:</span>
+            <input
+              id="sliderMaskSensitivity"
+              type="range"
+              min="0.60"
+              max="1.50"
+              step="0.05"
+              value="1.00"
+              oninput="document.getElementById('maskSensValue').textContent = parseFloat(this.value).toFixed(2) + 'x'; updateLiveMaskPreview();"
+              class="flex-1 accent-sky-500 h-1.5 bg-slate-700 rounded-lg cursor-pointer"
+            />
+            <span id="maskSensValue" class="text-[11px] font-semibold text-sky-400 w-9 text-right">1.00x</span>
           </div>
         </div>
       </section>
@@ -547,8 +567,34 @@
         document.getElementById('previewMaskCaption').textContent = 'Sẽ tách nền khi chạy';
         document.getElementById('imageStatusBadge').textContent = file.name;
         document.getElementById('imageStatusBadge').className = 'text-[11px] text-emerald-400 font-medium truncate max-w-[160px]';
+        updateLiveMaskPreview();
       };
       reader.readAsDataURL(file);
+    }
+
+    async function updateLiveMaskPreview() {
+      if (!currentUploadedBase64 && !currentSelectedSample) return;
+      const maskMode = document.getElementById('selectMaskMode').value;
+      const sensitivity = parseFloat(document.getElementById('sliderMaskSensitivity').value || '1.0');
+      try {
+        const res = await fetch('/api/preview-mask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mask_mode: maskMode,
+            sensitivity: sensitivity,
+            sample_name: currentSelectedSample,
+            image_base64: currentUploadedBase64
+          })
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        document.getElementById('previewInputImg').src = data.roi_rgb_b64;
+        document.getElementById('previewMaskImg').src = data.mask_b64;
+        document.getElementById('previewMaskCaption').textContent = `Silhouette (${data.foreground_coverage_pct}%)`;
+      } catch (err) {
+        console.error('Mask preview error:', err);
+      }
     }
 
     async function fetchSampleImages() {
@@ -587,6 +633,7 @@
       document.getElementById('previewMaskCaption').textContent = 'Tự động tách Silhouette';
       document.getElementById('imageStatusBadge').textContent = sample.label;
       document.getElementById('imageStatusBadge').className = 'text-[11px] text-sky-400 font-medium';
+      updateLiveMaskPreview();
     }
 
     function highlightSampleButtons(activeName) {
@@ -808,6 +855,7 @@
       const payload = {
         model_ids: Array.from(selectedModelIds),
         mask_mode: document.getElementById('selectMaskMode').value,
+        sensitivity: parseFloat(document.getElementById('sliderMaskSensitivity').value || '1.0'),
         use_pruning: document.getElementById('chkEdgePruning').checked,
         sample_name: currentSelectedSample,
         image_base64: currentUploadedBase64,

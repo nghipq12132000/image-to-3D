@@ -150,10 +150,18 @@ class ScanDirRequest(BaseModel):
 class ConvertRequest(BaseModel):
     model_ids: List[str]
     mask_mode: str = "auto"
+    sensitivity: float = 1.0
     use_pruning: bool = False
     sample_name: Optional[str] = None
     image_base64: Optional[str] = None
     image_filename: Optional[str] = None
+
+
+class PreviewMaskRequest(BaseModel):
+    mask_mode: str = "auto"
+    sensitivity: float = 1.0
+    sample_name: Optional[str] = None
+    image_base64: Optional[str] = None
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -332,6 +340,32 @@ async def get_sample_images():
     return {"samples": samples}
 
 
+@app.post("/api/preview-mask")
+async def preview_silhouette_mask(req: PreviewMaskRequest):
+    """Generates an instant 2D ROI & Silhouette Mask preview when the user drops an image or adjusts sensitivity."""
+    if req.image_base64:
+        b64_str = req.image_base64
+        if "," in b64_str:
+            b64_str = b64_str.split(",", 1)[1]
+        img_bytes = base64.b64decode(b64_str)
+    elif req.sample_name:
+        sp = os.path.join(SAMPLES_DIR, os.path.basename(req.sample_name))
+        if not os.path.exists(sp):
+            raise HTTPException(status_code=404, detail=f"Không tìm thấy ảnh mẫu: {req.sample_name}")
+        with open(sp, "rb") as f:
+            img_bytes = f.read()
+    else:
+        raise HTTPException(status_code=400, detail="Chưa có dữ liệu ảnh để tách nền.")
+
+    prep = preprocess_image_bytes(img_bytes, DEVICE, mask_mode=req.mask_mode, sensitivity=req.sensitivity)
+    return {
+        "roi_rgb_b64": prep["roi_rgb_b64"],
+        "mask_b64": prep["mask_b64"],
+        "orig_size": prep["orig_size"],
+        "foreground_coverage_pct": prep["foreground_coverage_pct"],
+    }
+
+
 @app.post("/api/convert")
 async def convert_image_to_3d(req: ConvertRequest):
     """
@@ -358,7 +392,7 @@ async def convert_image_to_3d(req: ConvertRequest):
     else:
         raise HTTPException(status_code=400, detail="Vui lòng kéo-thả hoặc chọn một ảnh 2D đầu vào.")
 
-    prep = preprocess_image_bytes(img_bytes, DEVICE, mask_mode=req.mask_mode)
+    prep = preprocess_image_bytes(img_bytes, DEVICE, mask_mode=req.mask_mode, sensitivity=req.sensitivity)
     img_t = prep["img_tensor"]
     msk_t = prep["mask_tensor"]
 
