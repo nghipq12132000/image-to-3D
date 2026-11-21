@@ -35,6 +35,7 @@ from core.preprocess import preprocess_image_bytes
 from core.exporter import (
     compute_vertex_and_face_normals,
     apply_adaptive_edge_pruning,
+    refine_and_fair_3d_mesh,
     export_to_obj_bytes,
     export_to_stl_bytes,
     export_to_ply_bytes,
@@ -151,6 +152,7 @@ class ConvertRequest(BaseModel):
     model_ids: List[str]
     mask_mode: str = "auto"
     sensitivity: float = 1.0
+    refine_mode: str = "cad_smooth"
     use_pruning: bool = False
     sample_name: Optional[str] = None
     image_base64: Optional[str] = None
@@ -424,11 +426,15 @@ async def convert_image_to_3d(req: ConvertRequest):
                 torch.cuda.synchronize()
         latency_ms = round((time.perf_counter() - t0) * 1000.0, 2)
 
-        verts_np = v_fine_t[0].detach().cpu().numpy().astype(np.float32)
-        if req.use_pruning:
-            faces_np = apply_adaptive_edge_pruning(verts_np, TPL_FACES_NP, stretch_ratio=2.35)
-        else:
-            faces_np = TPL_FACES_NP.copy()
+        v_raw_np = v_fine_t[0].detach().cpu().numpy().astype(np.float32)
+        verts_np, faces_np = refine_and_fair_3d_mesh(
+            v_raw_np,
+            TPL_VERTS_NP,
+            TPL_FACES_NP,
+            TPL_ADJ_NP,
+            refine_mode=req.refine_mode,
+            use_pruning=req.use_pruning,
+        )
 
         v_normals_np, _ = compute_vertex_and_face_normals(verts_np, faces_np)
 

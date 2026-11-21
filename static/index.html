@@ -216,6 +216,16 @@
             />
             <span id="maskSensValue" class="text-[11px] font-semibold text-sky-400 w-9 text-right">1.00x</span>
           </div>
+
+          <!-- Lựa chọn Thuật toán Làm mịn Hình học 3D (Mesh Fairing & Subdivision) -->
+          <div>
+            <label class="text-[11px] text-sky-400 font-semibold block mb-0.5">✨ Thuật toán Làm mịn Lưới 3D (Mesh Fairing):</label>
+            <select id="selectRefineMode" class="w-full bg-slate-900 border border-sky-500/40 rounded px-2 py-1.5 text-[11px] text-slate-100 outline-none">
+              <option value="cad_smooth">Chuẩn CAD Siêu Mượt (Elastic Shrink-Wrap + Taubin λ|μ + Loop 5.120 mặt)</option>
+              <option value="taubin_smooth">Làm mịn Phổ Taubin λ|μ + Khử đỉnh gai (Giữ 642 đỉnh / 1.280 mặt)</option>
+              <option value="raw">Đầu ra Nơ-ron Thô (Raw Output - 642 đỉnh / 1.280 mặt)</option>
+            </select>
+          </div>
         </div>
       </section>
 
@@ -856,6 +866,7 @@
         model_ids: Array.from(selectedModelIds),
         mask_mode: document.getElementById('selectMaskMode').value,
         sensitivity: parseFloat(document.getElementById('sliderMaskSensitivity').value || '1.0'),
+        refine_mode: document.getElementById('selectRefineMode').value,
         use_pruning: document.getElementById('chkEdgePruning').checked,
         sample_name: currentSelectedSample,
         image_base64: currentUploadedBase64,
