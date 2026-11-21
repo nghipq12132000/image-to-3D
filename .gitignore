@@ -1,0 +1,22 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Large model weights & temporary exports
+models/imported/*.pt
+models/imported/*.pth
+exports/*
+!models/imported/.gitkeep
+!exports/.gitkeep
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

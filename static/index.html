@@ -1,0 +1,1418 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image-to-3D Mesh Reconstruction Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', Inter, system-ui, -apple-system, sans-serif;
+      background-color: #0b1120;
+      color: #e2e8f0;
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #0f172a; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    .drop-active {
+      border-color: #38bdf8 !important;
+      background-color: rgba(56, 189, 248, 0.12) !important;
+    }
+    .grid-card-3d {
+      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+    }
+    .grid-card-3d:hover {
+      transform: translateY(-3px);
+      border-color: #38bdf8;
+      box-shadow: 0 10px 25px -5px rgba(56, 189, 248, 0.22);
+    }
+  </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden select-none">
+
+  <!-- ======================= TOP HEADER BAR ======================= -->
+  <header class="h-14 bg-slate-900/95 border-b border-slate-800 px-5 flex items-center justify-between shrink-0 z-20">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-md shadow-sky-500/20 font-bold text-white text-lg">
+        3D
+      </div>
+      <div>
+        <h1 class="text-base font-bold tracking-tight text-white flex items-center gap-2">
+          Image-to-3D Mesh Reconstruction Studio
+          <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/30">
+            GeoAttMesh-Lite &amp; Baselines
+          </span>
+        </h1>
+        <p class="text-[11px] text-slate-400">Chuyển đổi ảnh đơn 2D sang mô hình lưới tam giác 3D &amp; Xuất file đồ họa chuẩn (.OBJ, .GLB, .STL, .PLY)</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <div id="headerDeviceBadge" class="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 border border-slate-700 text-xs text-slate-300">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span id="headerDeviceText">Device: Đang kiểm tra...</span>
+      </div>
+
+      <!-- NÚT NHỎ XEM CẤU HÌNH MÁY SERVER -->
+      <button
+        id="btnServerSpecs"
+        onclick="openServerSpecsModal()"
+        title="Xem cấu hình phần cứng máy chủ đang chạy chương trình"
+        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 active:bg-slate-600 text-sky-300 border border-slate-700 hover:border-sky-500/50 text-xs font-medium transition shadow-sm"
+      >
+        <span>🖥️</span>
+        <span>Cấu hình Server</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ======================= MAIN 2-COLUMN WORKSPACE ======================= -->
+  <div class="flex-1 flex overflow-hidden">
+
+    <!-- ==================== LEFT SIDE: CONTROL & INPUT PANEL ==================== -->
+    <aside class="w-[400px] shrink-0 bg-slate-900/80 border-r border-slate-800 flex flex-col h-full overflow-y-auto p-4 space-y-4">
+
+      <!-- 1. FIELD IMPORT MODELS ĐÃ TRAINING -->
+      <section class="bg-slate-800/60 border border-slate-700/80 rounded-xl p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1.5">
+            <span>1. Import Trained Models (.pt)</span>
+          </h2>
+          <span id="modelTotalCountBadge" class="text-[11px] px-2 py-0.5 rounded bg-slate-700 text-slate-300 font-medium">
+            0 models
+          </span>
+        </div>
+
+        <!-- Upload file .pt trực tiếp -->
+        <div class="flex gap-2">
+          <label class="flex-1 cursor-pointer flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 text-xs font-medium transition">
+            <span>📂 Chọn / Import File .pt</span>
+            <input id="inputModelFiles" type="file" multiple accept=".pt,.pth" class="hidden" onchange="handleUploadModelFiles(this.files)" />
+          </label>
+          <button
+            onclick="clearAllModels()"
+            title="Xóa danh sách model hiện tại"
+            class="px-2.5 py-2 rounded-lg bg-slate-700/70 hover:bg-rose-600/30 text-slate-300 hover:text-rose-300 border border-slate-600 text-xs transition"
+          >
+            🗑️
+          </button>
+        </div>
+
+        <!-- Nhập đường dẫn thư mục chứa model -->
+        <div class="space-y-1.5">
+          <label class="text-[11px] text-slate-400 block">Hoặc quét thư mục chứa các model đã train:</label>
+          <div class="flex gap-1.5">
+            <input
+              id="inputModelFolder"
+              type="text"
+              placeholder="Nhập đường dẫn thư mục (VD: D:\models hoặc G:\My Drive\...)"
+              class="flex-1 bg-slate-900/90 border border-slate-700 focus:border-sky-500 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 outline-none"
+            />
+            <button
+              onclick="scanFolderFromInput()"
+              class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-medium shrink-0 transition"
+            >
+              Nạp
+            </button>
+          </div>
+        </div>
+
+        <!-- Nút nạp nhanh từ Google Drive Session 2 & Session 1 -->
+        <div class="flex flex-wrap gap-1.5 pt-0.5">
+          <button
+            id="btnPresetSession2"
+            onclick="loadPresetFolder('session2')"
+            class="flex-1 py-1 px-2 rounded bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-[11px] font-medium transition"
+          >
+            ⚡ Nạp Session 2
+          </button>
+          <button
+            id="btnPresetSession1"
+            onclick="loadPresetFolder('session1')"
+            class="flex-1 py-1 px-2 rounded bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-[11px] font-medium transition"
+          >
+            ⚡ Nạp Session 1
+          </button>
+        </div>
+      </section>
+
+      <!-- 2. KÉO THẢ ẢNH 2D ĐẦU VÀO (DRAG & DROP IMAGE) -->
+      <section class="bg-slate-800/60 border border-slate-700/80 rounded-xl p-3.5 space-y-2.5">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-sky-400">
+            2. Ảnh 2D Đầu Vào (Drag &amp; Drop)
+          </h2>
+          <span id="imageStatusBadge" class="text-[11px] text-slate-400">Chưa chọn ảnh</span>
+        </div>
+
+        <!-- Vùng kéo thả ảnh -->
+        <div
+          id="imageDropZone"
+          onclick="document.getElementById('inputImageFile').click()"
+          class="border-2 border-dashed border-slate-600 hover:border-sky-400 rounded-xl p-3 text-center cursor-pointer transition bg-slate-900/50 relative"
+        >
+          <input id="inputImageFile" type="file" accept="image/*" class="hidden" onchange="handleImageFileSelect(this.files[0])" />
+
+          <div id="imageEmptyPrompt" class="py-3 space-y-1">
+            <div class="text-2xl">🖼️</div>
+            <p class="text-xs font-medium text-slate-200">Kéo &amp; thả ảnh vào đây hoặc bấm để chọn</p>
+            <p class="text-[11px] text-slate-400">Hỗ trợ PNG, JPG, WEBP (Tự động tách mặt nạ &amp; ROI 224×224)</p>
+          </div>
+
+          <!-- Khung xem trước ảnh & mặt nạ -->
+          <div id="imagePreviewContainer" class="hidden grid grid-cols-2 gap-2 items-center">
+            <div class="bg-slate-950 rounded-lg p-1 border border-slate-700">
+              <img id="previewInputImg" src="" alt="Input 2D" class="w-full h-28 object-contain rounded" />
+              <span class="text-[10px] text-slate-400 block mt-0.5">Ảnh 2D đầu vào</span>
+            </div>
+            <div class="bg-slate-950 rounded-lg p-1 border border-slate-700">
+              <img id="previewMaskImg" src="" alt="Silhouette Mask" class="w-full h-28 object-contain rounded opacity-90" />
+              <span id="previewMaskCaption" class="text-[10px] text-sky-400 block mt-0.5">Mặt nạ Silhouette</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chọn nhanh ảnh mẫu Pix3D -->
+        <div class="space-y-1">
+          <span class="text-[11px] text-slate-400 block">Hoặc thử nhanh với ảnh mẫu Pix3D có sẵn:</span>
+          <div id="sampleImagesBar" class="flex flex-wrap gap-1.5"></div>
+        </div>
+
+        <!-- Tùy chọn tiền xử lý & hậu xử lý -->
+        <div class="grid grid-cols-2 gap-2 pt-1 border-t border-slate-700/60 text-xs">
+          <div>
+            <label class="text-[11px] text-slate-400 block mb-0.5">Chế độ tách nền:</label>
+            <select id="selectMaskMode" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[11px] text-slate-200 outline-none">
+              <option value="auto">Tự động (GrabCut / Alpha)</option>
+              <option value="full">Giữ toàn bộ khung ảnh</option>
+            </select>
+          </div>
+          <div class="flex items-end pb-1">
+            <label class="flex items-center gap-1.5 cursor-pointer text-[11px] text-slate-300">
+              <input id="chkEdgePruning" type="checkbox" class="rounded accent-sky-500" />
+              <span>Cắt tỉa cạnh (Edge Pruning)</span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. CHỌN CÁC MODEL MUỐN SỬ DỤNG ĐỂ CONVERT -->
+      <section class="bg-slate-800/60 border border-slate-700/80 rounded-xl p-3.5 flex-1 flex flex-col min-h-[210px] space-y-2">
+        <div class="flex items-center justify-between">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-sky-400">
+            3. Chọn Models Để Convert
+          </h2>
+          <span id="selectedModelCountText" class="text-[11px] text-emerald-400 font-semibold">Đã chọn: 0</span>
+        </div>
+
+        <!-- Tìm kiếm & Chọn nhanh -->
+        <div class="flex gap-1.5">
+          <input
+            id="inputFilterModels"
+            type="text"
+            oninput="renderModelChecklist()"
+            placeholder="Lọc theo tên (VD: M4, GeoAtt, S1, Res18...)"
+            class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 outline-none focus:border-sky-500"
+          />
+        </div>
+        <div class="flex flex-wrap gap-1 text-[11px]">
+          <button onclick="selectModelsByFilter('all')" class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition">Chọn tất cả</button>
+          <button onclick="selectModelsByFilter('none')" class="px-2 py-0.5 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition">Bỏ chọn</button>
+          <button onclick="selectModelsByFilter('core_s1')" class="px-2 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/30 transition">4 Models Chính (M1-M4)</button>
+          <button onclick="selectModelsByFilter('geoatt')" class="px-2 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/30 transition">Nhóm GeoAttMesh</button>
+        </div>
+
+        <!-- Danh sách Checkbox các Model -->
+        <div id="modelChecklistContainer" class="flex-1 overflow-y-auto space-y-1.5 pr-1 max-h-60">
+          <p class="text-xs text-slate-500 text-center py-6">Chưa có model nào. Hãy import file .pt ở mục 1.</p>
+        </div>
+      </section>
+
+      <!-- 4. NÚT BẤM "LOAD 3D MODEL" -->
+      <button
+        id="btnLoad3DModel"
+        onclick="runConvertImageTo3D()"
+        class="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 active:scale-[0.99] text-white font-bold text-sm shadow-lg shadow-sky-500/25 flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
+      >
+        <span id="btnLoadIcon">🚀</span>
+        <span id="btnLoadText">Load 3D Model</span>
+      </button>
+
+    </aside>
+
+    <!-- ==================== RIGHT SIDE: 3D MODELS GRID VIEW ==================== -->
+    <main class="flex-1 flex flex-col h-full bg-slate-950 overflow-hidden">
+
+      <!-- Thanh công cụ phía trên Grid -->
+      <div class="h-12 border-b border-slate-800/80 bg-slate-900/50 px-5 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-300">
+            Kết Quả Tái Tạo Lưới 3D (Grid View)
+          </h2>
+          <span id="gridSummaryBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+            Sẵn sàng
+          </span>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button
+            onclick="toggleGlobalAutoRotate()"
+            id="btnGlobalRotate"
+            class="px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40 text-xs font-medium transition"
+          >
+            🔄 Tự xoay: BẬT
+          </button>
+          <button
+            onclick="toggleGlobalWireframe()"
+            id="btnGlobalWireframe"
+            class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-xs font-medium transition"
+          >
+            🕸️ Khung dây: TẮT
+          </button>
+          <a
+            id="btnDownloadAllZip"
+            href="#"
+            class="hidden items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow transition"
+          >
+            <span>📦 Tải tất cả (.ZIP)</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- Vùng chứa Grid các ô 3D -->
+      <div id="gridViewportArea" class="flex-1 overflow-y-auto p-5">
+        <!-- Trạng thái trống ban đầu -->
+        <div id="gridEmptyState" class="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-3 text-slate-400">
+          <div class="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center text-3xl shadow-inner">
+            🧊
+          </div>
+          <h3 class="text-base font-semibold text-slate-200">Chưa có mô hình 3D nào được hiển thị</h3>
+          <p class="text-xs leading-relaxed text-slate-400">
+            Ở cột bên trái, hãy kéo-thả một bức ảnh 2D (hoặc chọn ảnh mẫu Pix3D), tích chọn các model muốn thử nghiệm và bấm nút <strong class="text-sky-400">"Load 3D Model"</strong>. Mỗi ô trên lưới này sẽ hiển thị trực tiếp mô hình 3D tương ứng!
+          </p>
+        </div>
+
+        <!-- Lưới các ô 3D -->
+        <div id="models3DGrid" class="hidden grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-8"></div>
+      </div>
+    </main>
+
+  </div>
+
+  <!-- ======================= DIALOG 1: XEM CHI TIẾT MÔ HÌNH 3D & DOWNLOAD ======================= -->
+  <div
+    id="modal3DDetail"
+    class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4"
+  >
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-6xl h-[86vh] flex flex-col overflow-hidden shadow-2xl">
+      <!-- Modal Header -->
+      <div class="px-5 py-3.5 bg-slate-800/90 border-b border-slate-700 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-3">
+          <span class="text-xl">🧊</span>
+          <div>
+            <h3 id="modal3DTitle" class="text-base font-bold text-white">Chi tiết Mô hình 3D</h3>
+            <p id="modal3DSubtitle" class="text-xs text-slate-400"></p>
+          </div>
+        </div>
+        <button
+          onclick="close3DDetailModal()"
+          class="w-8 h-8 rounded-lg bg-slate-700/80 hover:bg-rose-600 text-slate-300 hover:text-white flex items-center justify-center text-sm font-bold transition"
+        >
+          ✕
+        </button>
+      </div>
+
+      <!-- Modal Body: Left 3D Interactive Canvas + Right Tools & Download Panel -->
+      <div class="flex-1 flex flex-col lg:flex-row overflow-hidden">
+
+        <!-- Khung tương tác 3D lớn -->
+        <div class="flex-1 relative bg-slate-950 flex flex-col">
+          <!-- Thanh điều khiển hiển thị 3D -->
+          <div class="absolute top-3 left-3 right-3 z-10 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+            <div class="flex flex-wrap gap-1.5 bg-slate-900/90 border border-slate-700/80 p-1.5 rounded-xl pointer-events-auto shadow-lg">
+              <button onclick="setModalShadingMode('clay')" id="btnModeClay" class="px-2.5 py-1 rounded-lg bg-sky-600 text-white text-xs font-medium transition">🎨 Studio Clay</button>
+              <button onclick="setModalShadingMode('normal')" id="btnModeNormal" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">🌈 Pháp tuyến 3D</button>
+              <button onclick="setModalShadingMode('metal')" id="btnModeMetal" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">⚙️ Metallic CAD</button>
+              <button onclick="toggleModalWireframe()" id="btnModalWire" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">🕸️ Wireframe</button>
+              <button onclick="toggleModalPoints()" id="btnModalPoints" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition">✨ Đám mây đỉnh</button>
+            </div>
+            <div class="flex gap-1.5 bg-slate-900/90 border border-slate-700/80 p-1.5 rounded-xl pointer-events-auto shadow-lg">
+              <button onclick="resetModalCamera()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition">🎯 Reset Góc nhìn</button>
+            </div>
+          </div>
+
+          <!-- Canvas container -->
+          <div id="modal3DCanvasHost" class="flex-1 w-full h-full cursor-grab active:cursor-grabbing"></div>
+
+          <!-- Hướng dẫn thao tác chuột -->
+          <div class="absolute bottom-3 left-4 bg-slate-900/85 border border-slate-800 px-3 py-1.5 rounded-lg text-[11px] text-slate-400 pointer-events-none">
+            🖱️ <strong>Chuột trái:</strong> Xoay 360° &nbsp;|&nbsp; <strong>Chuột phải:</strong> Di chuyển (Pan) &nbsp;|&nbsp; <strong>Con lăn:</strong> Phóng to / Thu nhỏ
+          </div>
+        </div>
+
+        <!-- Cột thông số & Download file 3D cho các phần mềm đồ họa -->
+        <div class="w-full lg:w-[370px] bg-slate-900 border-l border-slate-800 p-5 overflow-y-auto space-y-5 shrink-0">
+
+          <!-- Ảnh 2D ROI & Silhouette đối chiếu -->
+          <div class="space-y-2">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-sky-400">Ảnh 2D &amp; Mặt Nạ Đầu Vào</h4>
+            <div class="grid grid-cols-2 gap-2 bg-slate-950 p-2 rounded-xl border border-slate-800">
+              <div class="text-center">
+                <img id="modalRefRgb" src="" class="h-24 w-full object-contain rounded" />
+                <span class="text-[10px] text-slate-400">ROI 224×224</span>
+              </div>
+              <div class="text-center">
+                <img id="modalRefMask" src="" class="h-24 w-full object-contain rounded" />
+                <span class="text-[10px] text-slate-400">Silhouette Mask</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Thông số Kỹ thuật của Mô hình 3D -->
+          <div class="space-y-2">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-sky-400">Thông Số Hình Học &amp; Mô Hình</h4>
+            <div id="modal3DStatsGrid" class="grid grid-cols-2 gap-2 text-xs"></div>
+          </div>
+
+          <!-- KHU VỰC DOWNLOAD CÁC ĐỊNH DẠNG 3D PHỔ BIẾN -->
+          <div class="space-y-2.5 pt-2 border-t border-slate-800">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+              <span>📥 Tải File 3D Cho Phần Mềm Đồ Họa</span>
+            </h4>
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              Chọn định dạng phù hợp để import trực tiếp vào công cụ đồ họa 3D hoặc phần mềm in 3D của bạn:
+            </p>
+
+            <div class="space-y-2">
+              <!-- .OBJ -->
+              <a id="dlLinkObj" href="#" download class="flex items-center justify-between p-3 rounded-xl bg-slate-800/90 hover:bg-sky-600/20 border border-slate-700 hover:border-sky-500/60 transition group">
+                <div>
+                  <div class="text-xs font-bold text-white group-hover:text-sky-300 flex items-center gap-1.5">
+                    <span>📄 Wavefront .OBJ</span>
+                    <span class="text-[10px] px-1.5 py-0.2 rounded bg-sky-500/20 text-sky-300">Khuyên dùng</span>
+                  </div>
+                  <div class="text-[11px] text-slate-400 mt-0.5">Blender, Maya, 3ds Max, Cinema 4D, ZBrush</div>
+                </div>
+                <span class="px-2.5 py-1 rounded-lg bg-sky-600 text-white text-xs font-semibold">Tải .OBJ</span>
+              </a>
+
+              <!-- .GLB -->
+              <a id="dlLinkGlb" href="#" download class="flex items-center justify-between p-3 rounded-xl bg-slate-800/90 hover:bg-indigo-600/20 border border-slate-700 hover:border-indigo-500/60 transition group">
+                <div>
+                  <div class="text-xs font-bold text-white group-hover:text-indigo-300">🌐 Binary glTF 2.0 (.GLB)</div>
+                  <div class="text-[11px] text-slate-400 mt-0.5">Blender, Unity, Unreal Engine, Godot, WebGL</div>
+                </div>
+                <span class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white text-xs font-semibold">Tải .GLB</span>
+              </a>
+
+              <!-- .STL -->
+              <a id="dlLinkStl" href="#" download class="flex items-center justify-between p-3 rounded-xl bg-slate-800/90 hover:bg-emerald-600/20 border border-slate-700 hover:border-emerald-500/60 transition group">
+                <div>
+                  <div class="text-xs font-bold text-white group-hover:text-emerald-300">🖨️ Binary CAD / 3D Print (.STL)</div>
+                  <div class="text-[11px] text-slate-400 mt-0.5">Cura, PrusaSlicer, SolidWorks, AutoCAD, Fusion 360</div>
+                </div>
+                <span class="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Tải .STL</span>
+              </a>
+
+              <!-- .PLY -->
+              <a id="dlLinkPly" href="#" download class="flex items-center justify-between p-3 rounded-xl bg-slate-800/90 hover:bg-amber-600/20 border border-slate-700 hover:border-amber-500/60 transition group">
+                <div>
+                  <div class="text-xs font-bold text-white group-hover:text-amber-300">🎨 Stanford Polygon (.PLY)</div>
+                  <div class="text-[11px] text-slate-400 mt-0.5">MeshLab, CloudCompare, Open3D (Kèm màu đỉnh)</div>
+                </div>
+                <span class="px-2.5 py-1 rounded-lg bg-amber-600 text-white text-xs font-semibold">Tải .PLY</span>
+              </a>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= DIALOG 2: CẤU HÌNH MÁY SERVER ======================= -->
+  <div
+    id="modalServerSpecs"
+    class="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 hidden items-center justify-center p-4"
+  >
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
+      <div class="px-5 py-3.5 bg-slate-800 border-b border-slate-700 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <span class="text-lg">🖥️</span>
+          <div>
+            <h3 class="text-sm font-bold text-white">Cấu Hình Máy Chủ Đang Chạy Chương Trình (Server Diagnostics)</h3>
+            <p id="serverTimestamp" class="text-[11px] text-slate-400">Thông số phần cứng &amp; tài nguyên thời gian thực</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button
+            onclick="refreshServerSpecs()"
+            class="px-2.5 py-1 rounded-lg bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/40 text-xs font-medium transition"
+          >
+            🔄 Làm mới
+          </button>
+          <button
+            onclick="closeServerSpecsModal()"
+            class="w-7 h-7 rounded-lg bg-slate-700 hover:bg-rose-600 text-slate-300 hover:text-white flex items-center justify-center text-xs font-bold transition"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+
+      <div id="serverSpecsBody" class="p-5 overflow-y-auto space-y-4 text-xs">
+        <p class="text-center text-slate-400 py-8">Đang tải thông tin cấu hình máy chủ...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= JAVASCRIPT APPLICATION LOGIC ======================= -->
+  <script>
+    // Global State
+    let allModels = [];
+    let selectedModelIds = new Set();
+    let presetPaths = { session2_dir: "", session1_dir: "" };
+
+    let currentUploadedFile = null;
+    let currentUploadedBase64 = null;
+    let currentSelectedSample = null;
+    let lastConversionData = null;
+
+    // Three.js Grid Viewers & Modal Viewer
+    let gridViewers = [];
+    let globalAutoRotate = true;
+    let globalWireframe = false;
+
+    let modalRenderer = null;
+    let modalScene = null;
+    let modalCamera = null;
+    let modalControls = null;
+    let modalMeshGroup = null;
+    let modalCurrentResult = null;
+    let modalShadingMode = 'clay';
+    let modalShowWireframe = false;
+    let modalShowPoints = false;
+    let modalAnimId = null;
+
+    // Initialize on load
+    window.addEventListener('DOMContentLoaded', async () => {
+      setupDragAndDrop();
+      await fetchModelsList();
+      await fetchSampleImages();
+      await refreshServerSpecs(true);
+      requestAnimationFrame(animateAllViewers);
+    });
+
+    // ------------------- DRAG & DROP 2D IMAGE -------------------
+    function setupDragAndDrop() {
+      const dz = document.getElementById('imageDropZone');
+      ['dragenter', 'dragover'].forEach(evt => {
+        dz.addEventListener(evt, e => {
+          e.preventDefault();
+          e.stopPropagation();
+          dz.classList.add('drop-active');
+        });
+      });
+      ['dragleave', 'drop'].forEach(evt => {
+        dz.addEventListener(evt, e => {
+          e.preventDefault();
+          e.stopPropagation();
+          dz.classList.remove('drop-active');
+        });
+      });
+      dz.addEventListener('drop', e => {
+        const files = e.dataTransfer.files;
+        if (files && files.length > 0) {
+          handleImageFileSelect(files[0]);
+        }
+      });
+    }
+
+    function handleImageFileSelect(file) {
+      if (!file) return;
+      currentUploadedFile = file;
+      currentSelectedSample = null;
+      highlightSampleButtons(null);
+
+      const reader = new FileReader();
+      reader.onload = e => {
+        currentUploadedBase64 = e.target.result;
+        document.getElementById('imageEmptyPrompt').classList.add('hidden');
+        document.getElementById('imagePreviewContainer').classList.remove('hidden');
+        document.getElementById('previewInputImg').src = e.target.result;
+        document.getElementById('previewMaskImg').src = e.target.result;
+        document.getElementById('previewMaskCaption').textContent = 'Sẽ tách nền khi chạy';
+        document.getElementById('imageStatusBadge').textContent = file.name;
+        document.getElementById('imageStatusBadge').className = 'text-[11px] text-emerald-400 font-medium truncate max-w-[160px]';
+      };
+      reader.readAsDataURL(file);
+    }
+
+    async function fetchSampleImages() {
+      try {
+        const res = await fetch('/api/sample-images');
+        const data = await res.json();
+        const bar = document.getElementById('sampleImagesBar');
+        bar.innerHTML = '';
+        (data.samples || []).forEach((s, idx) => {
+          const btn = document.createElement('button');
+          btn.dataset.sample = s.name;
+          btn.className = 'sample-pill px-2 py-1 rounded bg-slate-700/80 hover:bg-sky-500/30 text-slate-300 border border-slate-600 text-[11px] transition';
+          btn.textContent = s.label.replace('Mẫu Pix3D: ', '');
+          btn.onclick = () => selectSampleImage(s);
+          bar.appendChild(btn);
+          if (idx === 2) {
+            // Pre-select Chair sample on startup for instant convenience
+            selectSampleImage(s);
+          }
+        });
+      } catch (err) {
+        console.error('Error loading sample images:', err);
+      }
+    }
+
+    function selectSampleImage(sample) {
+      currentSelectedSample = sample.name;
+      currentUploadedFile = null;
+      currentUploadedBase64 = null;
+      highlightSampleButtons(sample.name);
+
+      document.getElementById('imageEmptyPrompt').classList.add('hidden');
+      document.getElementById('imagePreviewContainer').classList.remove('hidden');
+      document.getElementById('previewInputImg').src = sample.url;
+      document.getElementById('previewMaskImg').src = sample.url;
+      document.getElementById('previewMaskCaption').textContent = 'Tự động tách Silhouette';
+      document.getElementById('imageStatusBadge').textContent = sample.label;
+      document.getElementById('imageStatusBadge').className = 'text-[11px] text-sky-400 font-medium';
+    }
+
+    function highlightSampleButtons(activeName) {
+      document.querySelectorAll('.sample-pill').forEach(btn => {
+        if (btn.dataset.sample === activeName) {
+          btn.className = 'sample-pill px-2 py-1 rounded bg-sky-600 text-white border border-sky-400 text-[11px] font-semibold transition';
+        } else {
+          btn.className = 'sample-pill px-2 py-1 rounded bg-slate-700/80 hover:bg-sky-500/30 text-slate-300 border border-slate-600 text-[11px] transition';
+        }
+      });
+    }
+
+    // ------------------- MODELS MANAGEMENT -------------------
+    async function fetchModelsList() {
+      try {
+        const res = await fetch('/api/models');
+        const data = await res.json();
+        allModels = data.models || [];
+        presetPaths = data.presets || {};
+
+        if (presetPaths.session2_dir) {
+          document.getElementById('inputModelFolder').value = presetPaths.session2_dir;
+        }
+        // Auto-select core S1 models if none selected yet
+        if (selectedModelIds.size === 0 && allModels.length > 0) {
+          selectModelsByFilter('core_s1', false);
+        }
+        renderModelChecklist();
+      } catch (err) {
+        console.error('Error fetching models:', err);
+      }
+    }
+
+    async function handleUploadModelFiles(fileList) {
+      if (!fileList || fileList.length === 0) return;
+      try {
+        for (const f of fileList) {
+          const res = await fetch(`/api/models/upload-raw?filename=${encodeURIComponent(f.name)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: f
+          });
+          if (!res.ok) {
+            const err = await res.json();
+            alert(err.detail || `Lỗi khi import ${f.name}`);
+            continue;
+          }
+          const data = await res.json();
+          allModels = data.all_models || [];
+          if (data.added) selectedModelIds.add(data.added.id);
+        }
+        renderModelChecklist();
+      } catch (err) {
+        alert('Lỗi khi import file model: ' + err.message);
+      }
+    }
+
+    async function scanFolderFromInput() {
+      const folder = document.getElementById('inputModelFolder').value.trim();
+      if (!folder) {
+        alert('Vui lòng nhập đường dẫn thư mục chứa file .pt!');
+        return;
+      }
+      await scanFolder(folder);
+    }
+
+    async function loadPresetFolder(which) {
+      const folder = which === 'session2' ? presetPaths.session2_dir : presetPaths.session1_dir;
+      if (!folder) {
+        alert('Không tìm thấy thư mục mặc định trên máy. Bạn hãy nhập đường dẫn vào ô bên trên.');
+        return;
+      }
+      document.getElementById('inputModelFolder').value = folder;
+      await scanFolder(folder);
+    }
+
+    async function scanFolder(folderPath) {
+      try {
+        const res = await fetch('/api/models/scan-dir', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder_path: folderPath })
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          alert(err.detail || 'Không thể quét thư mục');
+          return;
+        }
+        const data = await res.json();
+        allModels = data.models || [];
+        if (selectedModelIds.size === 0) {
+          selectModelsByFilter('core_s1', false);
+        }
+        renderModelChecklist();
+      } catch (err) {
+        alert('Lỗi khi quét thư mục: ' + err.message);
+      }
+    }
+
+    async function clearAllModels() {
+      await fetch('/api/models/clear', { method: 'POST' });
+      allModels = [];
+      selectedModelIds.clear();
+      renderModelChecklist();
+    }
+
+    function selectModelsByFilter(mode, shouldRender = true) {
+      if (mode === 'all') {
+        allModels.forEach(m => selectedModelIds.add(m.id));
+      } else if (mode === 'none') {
+        selectedModelIds.clear();
+      } else if (mode === 'core_s1') {
+        selectedModelIds.clear();
+        allModels.forEach(m => {
+          if (m.split_tag === 'S1' && (m.name.startsWith('M1_') || m.name.startsWith('M2_') || m.name.startsWith('M3_') || m.name.startsWith('M4_'))) {
+            selectedModelIds.add(m.id);
+          }
+        });
+        if (selectedModelIds.size === 0) {
+          allModels.slice(0, 4).forEach(m => selectedModelIds.add(m.id));
+        }
+      } else if (mode === 'geoatt') {
+        selectedModelIds.clear();
+        allModels.forEach(m => {
+          if (m.decoder === 'GeoAttMesh-Lite' && m.split_tag === 'S1') {
+            selectedModelIds.add(m.id);
+          }
+        });
+      }
+      if (shouldRender) renderModelChecklist();
+    }
+
+    function toggleModelSelection(id) {
+      if (selectedModelIds.has(id)) {
+        selectedModelIds.delete(id);
+      } else {
+        selectedModelIds.add(id);
+      }
+      updateSelectedCounter();
+    }
+
+    function updateSelectedCounter() {
+      document.getElementById('modelTotalCountBadge').textContent = `${allModels.length} models`;
+      document.getElementById('selectedModelCountText').textContent = `Đã chọn: ${selectedModelIds.size}`;
+    }
+
+    function renderModelChecklist() {
+      updateSelectedCounter();
+      const container = document.getElementById('modelChecklistContainer');
+      const query = (document.getElementById('inputFilterModels').value || '').toLowerCase().trim();
+
+      const filtered = allModels.filter(m => {
+        if (!query) return true;
+        const hay = `${m.name} ${m.backbone} ${m.decoder} ${m.session_label} ${m.split_tag}`.toLowerCase();
+        return hay.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `<p class="text-xs text-slate-500 text-center py-6">Không tìm thấy model phù hợp.</p>`;
+        return;
+      }
+
+      container.innerHTML = '';
+      filtered.forEach(m => {
+        const checked = selectedModelIds.has(m.id);
+        const sessBadgeClass = m.session_version === 'session2'
+          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+          : 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+
+        const decBadgeClass = m.decoder === 'GeoAttMesh-Lite'
+          ? 'bg-sky-500/20 text-sky-300 border-sky-500/30'
+          : 'bg-slate-700 text-slate-300 border-slate-600';
+
+        const item = document.createElement('label');
+        item.className = `flex items-start gap-2.5 p-2 rounded-lg border cursor-pointer transition ${
+          checked ? 'bg-sky-950/40 border-sky-500/50' : 'bg-slate-900/60 border-slate-800 hover:border-slate-700'
+        }`;
+        item.innerHTML = `
+          <input
+            type="checkbox"
+            class="mt-1 rounded accent-sky-500"
+            ${checked ? 'checked' : ''}
+            onchange="toggleModelSelection('${m.id}'); this.closest('label').classList.toggle('bg-sky-950/40'); this.closest('label').classList.toggle('border-sky-500/50');"
+          />
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center justify-between gap-1">
+              <span class="text-xs font-semibold text-slate-100 truncate">${m.name}</span>
+              <span class="text-[10px] px-1.5 py-0.2 rounded border ${sessBadgeClass} shrink-0">${m.session_label}</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-1 mt-1 text-[10px]">
+              <span class="px-1.5 py-0.2 rounded border ${decBadgeClass}">${m.decoder}</span>
+              <span class="px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">${m.backbone}</span>
+              <span class="text-slate-400 ml-auto">${m.params_m}M</span>
+            </div>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    // ------------------- CONVERT 2D IMAGE TO 3D MODELS -------------------
+    async function runConvertImageTo3D() {
+      if (selectedModelIds.size === 0) {
+        alert('Vui lòng tích chọn ít nhất 1 model ở mục 3!');
+        return;
+      }
+      if (!currentUploadedFile && !currentSelectedSample) {
+        alert('Vui lòng kéo-thả ảnh 2D hoặc chọn một ảnh mẫu ở mục 2!');
+        return;
+      }
+
+      const btn = document.getElementById('btnLoad3DModel');
+      const btnText = document.getElementById('btnLoadText');
+      const btnIcon = document.getElementById('btnLoadIcon');
+      btn.disabled = true;
+      btnIcon.textContent = '⏳';
+      btnText.textContent = `Đang tái tạo ${selectedModelIds.size} mô hình 3D...`;
+
+      const payload = {
+        model_ids: Array.from(selectedModelIds),
+        mask_mode: document.getElementById('selectMaskMode').value,
+        use_pruning: document.getElementById('chkEdgePruning').checked,
+        sample_name: currentSelectedSample,
+        image_base64: currentUploadedBase64,
+        image_filename: currentUploadedFile ? currentUploadedFile.name : null
+      };
+
+      try {
+        const res = await fetch('/api/convert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.detail || 'Lỗi khi chuyển đổi 3D');
+        }
+        const data = await res.json();
+        lastConversionData = data;
+
+        // Update 2D ROI & Silhouette Mask previews
+        if (data.preprocessing) {
+          document.getElementById('previewInputImg').src = data.preprocessing.roi_rgb_b64;
+          document.getElementById('previewMaskImg').src = data.preprocessing.mask_b64;
+          document.getElementById('previewMaskCaption').textContent = `Silhouette (${data.preprocessing.foreground_coverage_pct}%)`;
+        }
+
+        // Update Summary & Batch ZIP Link
+        document.getElementById('gridSummaryBadge').textContent =
+          `Đã tạo ${data.results.length} mô hình 3D trong ${data.total_time_ms} ms`;
+        document.getElementById('gridSummaryBadge').className =
+          'text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-medium';
+
+        const zipBtn = document.getElementById('btnDownloadAllZip');
+        if (data.download_all_zip && data.results.length > 0) {
+          zipBtn.href = data.download_all_zip;
+          zipBtn.classList.remove('hidden');
+          zipBtn.classList.add('flex');
+        }
+
+        render3DModelsGrid(data.results);
+      } catch (err) {
+        alert('Lỗi: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btnIcon.textContent = '🚀';
+        btnText.textContent = 'Load 3D Model';
+      }
+    }
+
+    // ------------------- THREE.JS 3D GRID RENDERING -------------------
+    function disposeGridViewers() {
+      gridViewers.forEach(v => {
+        if (v.renderer) {
+          v.renderer.dispose();
+        }
+      });
+      gridViewers = [];
+    }
+
+    function buildThreeGeometryFromResult(resItem) {
+      const geometry = new THREE.BufferGeometry();
+      const flatVerts = new Float32Array(resItem.vertices.length * 3);
+      for (let i = 0; i < resItem.vertices.length; i++) {
+        flatVerts[i * 3]     = resItem.vertices[i][0];
+        flatVerts[i * 3 + 1] = resItem.vertices[i][1];
+        flatVerts[i * 3 + 2] = resItem.vertices[i][2];
+      }
+      const flatIndices = new Uint32Array(resItem.faces.length * 3);
+      for (let i = 0; i < resItem.faces.length; i++) {
+        flatIndices[i * 3]     = resItem.faces[i][0];
+        flatIndices[i * 3 + 1] = resItem.faces[i][1];
+        flatIndices[i * 3 + 2] = resItem.faces[i][2];
+      }
+      geometry.setAttribute('position', new THREE.BufferAttribute(flatVerts, 3));
+      geometry.setIndex(new THREE.BufferAttribute(flatIndices, 1));
+      geometry.computeVertexNormals();
+      return geometry;
+    }
+
+    function render3DModelsGrid(results) {
+      disposeGridViewers();
+      const emptyState = document.getElementById('gridEmptyState');
+      const gridEl = document.getElementById('models3DGrid');
+
+      if (!results || results.length === 0) {
+        emptyState.classList.remove('hidden');
+        gridEl.classList.add('hidden');
+        return;
+      }
+
+      emptyState.classList.add('hidden');
+      gridEl.classList.remove('hidden');
+      gridEl.innerHTML = '';
+
+      results.forEach((item, idx) => {
+        const isProposed = item.decoder === 'GeoAttMesh-Lite';
+        const card = document.createElement('div');
+        card.className = `grid-card-3d bg-slate-900 border ${
+          isProposed ? 'border-sky-500/40' : 'border-slate-800'
+        } rounded-2xl overflow-hidden flex flex-col cursor-pointer`;
+
+        // Click on card opens the detailed 3D dialog
+        card.onclick = () => open3DDetailModal(idx);
+
+        const sessClass = item.session_version === 'session2'
+          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+          : 'bg-amber-500/20 text-amber-300 border-amber-500/30';
+
+        card.innerHTML = `
+          <!-- Card Header -->
+          <div class="px-4 py-2.5 bg-slate-800/70 border-b border-slate-800 flex items-center justify-between gap-2">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5">
+                <span class="text-xs font-bold text-white truncate">${item.model_name}</span>
+              </div>
+              <div class="text-[11px] text-slate-400 truncate">${item.backbone} • <span class="text-sky-400 font-medium">${item.decoder}</span></div>
+            </div>
+            <span class="text-[10px] px-2 py-0.5 rounded-full border ${sessClass} font-semibold shrink-0">
+              ${item.session_label}
+            </span>
+          </div>
+
+          <!-- 3D WebGL Canvas Cell -->
+          <div id="gridCanvasHost_${idx}" class="h-56 w-full bg-gradient-to-b from-slate-900 to-slate-950 relative">
+            <div class="absolute top-2 right-2 z-10 px-2 py-0.5 rounded bg-slate-900/80 border border-slate-700 text-[10px] text-sky-300">
+              🔍 Bấm để phóng to 3D
+            </div>
+          </div>
+
+          <!-- Metrics & Quick Download Footer -->
+          <div class="p-3 bg-slate-900/95 border-t border-slate-800/80 space-y-2">
+            <div class="flex items-center justify-between text-[11px] text-slate-400">
+              <span>⏱️ <strong class="text-slate-200">${item.latency_ms} ms</strong></span>
+              <span>🔹 <strong class="text-slate-200">${item.num_vertices}</strong> đỉnh</span>
+              <span>🔺 <strong class="text-slate-200">${item.num_faces}</strong> mặt</span>
+              <span>🧠 <strong class="text-slate-200">${item.params_m}M</strong></span>
+            </div>
+
+            <!-- Quick Export Links (stopPropagation so clicking them downloads directly) -->
+            <div class="flex items-center gap-1.5 pt-1 border-t border-slate-800/80" onclick="event.stopPropagation()">
+              <span class="text-[10px] text-slate-400 mr-auto">Tải nhanh:</span>
+              <a href="${item.downloads.obj}" download class="px-2 py-0.5 rounded bg-sky-500/20 hover:bg-sky-500 text-sky-300 hover:text-white text-[10px] font-semibold transition">.OBJ</a>
+              <a href="${item.downloads.glb}" download class="px-2 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500 text-indigo-300 hover:text-white text-[10px] font-semibold transition">.GLB</a>
+              <a href="${item.downloads.stl}" download class="px-2 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500 text-emerald-300 hover:text-white text-[10px] font-semibold transition">.STL</a>
+              <a href="${item.downloads.ply}" download class="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500 text-amber-300 hover:text-white text-[10px] font-semibold transition">.PLY</a>
+            </div>
+          </div>
+        `;
+        gridEl.appendChild(card);
+
+        // Initialize Three.js mini-scene for this grid cell
+        setTimeout(() => initMiniGridViewer(idx, item), 20);
+      });
+    }
+
+    function initMiniGridViewer(idx, resItem) {
+      const host = document.getElementById(`gridCanvasHost_${idx}`);
+      if (!host) return;
+
+      const w = host.clientWidth || 300;
+      const h = host.clientHeight || 224;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(40, w / h, 0.1, 100);
+      camera.position.set(1.75, 1.25, 2.15);
+      camera.lookAt(0, 0, 0);
+
+      const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(w, h);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      host.appendChild(renderer.domElement);
+
+      // Studio Lighting
+      const ambLight = new THREE.AmbientLight(0xffffff, 0.65);
+      scene.add(ambLight);
+      const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.9);
+      dirLight1.position.set(3, 5, 4);
+      scene.add(dirLight1);
+      const dirLight2 = new THREE.DirectionalLight(0x38bdf8, 0.45);
+      dirLight2.position.set(-4, -2, -3);
+      scene.add(dirLight2);
+
+      // Subtle floor grid
+      const gridHelper = new THREE.GridHelper(2.2, 8, 0x334155, 0x1e293b);
+      gridHelper.position.y = -0.95;
+      scene.add(gridHelper);
+
+      const geometry = buildThreeGeometryFromResult(resItem);
+      const isProposed = resItem.decoder === 'GeoAttMesh-Lite';
+
+      const matSolid = new THREE.MeshStandardMaterial({
+        color: isProposed ? 0x38bdf8 : 0x94a3b8,
+        roughness: 0.38,
+        metalness: 0.15,
+        side: THREE.DoubleSide,
+      });
+      const meshSolid = new THREE.Mesh(geometry, matSolid);
+
+      const matWire = new THREE.MeshBasicMaterial({
+        color: 0x0f172a,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.28,
+      });
+      const meshWire = new THREE.Mesh(geometry, matWire);
+      meshWire.visible = globalWireframe;
+
+      const group = new THREE.Group();
+      group.add(meshSolid);
+      group.add(meshWire);
+      scene.add(group);
+
+      gridViewers.push({
+        renderer,
+        scene,
+        camera,
+        group,
+        meshWire,
+      });
+    }
+
+    function animateAllViewers() {
+      requestAnimationFrame(animateAllViewers);
+      gridViewers.forEach(v => {
+        if (globalAutoRotate && v.group) {
+          v.group.rotation.y += 0.008;
+        }
+        v.renderer.render(v.scene, v.camera);
+      });
+    }
+
+    function toggleGlobalAutoRotate() {
+      globalAutoRotate = !globalAutoRotate;
+      const btn = document.getElementById('btnGlobalRotate');
+      btn.textContent = globalAutoRotate ? '🔄 Tự xoay: BẬT' : '🔄 Tự xoay: TẮT';
+      btn.className = globalAutoRotate
+        ? 'px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40 text-xs font-medium transition'
+        : 'px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 text-xs font-medium transition';
+    }
+
+    function toggleGlobalWireframe() {
+      globalWireframe = !globalWireframe;
+      const btn = document.getElementById('btnGlobalWireframe');
+      btn.textContent = globalWireframe ? '🕸️ Khung dây: BẬT' : '🕸️ Khung dây: TẮT';
+      btn.className = globalWireframe
+        ? 'px-2.5 py-1 rounded-lg bg-sky-500/20 text-sky-300 border border-sky-500/40 text-xs font-medium transition'
+        : 'px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-xs font-medium transition';
+      gridViewers.forEach(v => {
+        if (v.meshWire) v.meshWire.visible = globalWireframe;
+      });
+    }
+
+    // ------------------- DIALOG 1: DETAILED 3D INSPECTOR & DOWNLOAD MODAL -------------------
+    function open3DDetailModal(resultIdx) {
+      if (!lastConversionData || !lastConversionData.results[resultIdx]) return;
+      const item = lastConversionData.results[resultIdx];
+      modalCurrentResult = item;
+
+      const modal = document.getElementById('modal3DDetail');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+
+      document.getElementById('modal3DTitle').textContent = `${item.model_name} (${item.session_label})`;
+      document.getElementById('modal3DSubtitle').textContent =
+        `Backbone: ${item.backbone} | Decoder: ${item.decoder} | Tham số: ${item.params_m}M | Thời gian suy luận: ${item.latency_ms} ms`;
+
+      if (lastConversionData.preprocessing) {
+        document.getElementById('modalRefRgb').src = lastConversionData.preprocessing.roi_rgb_b64;
+        document.getElementById('modalRefMask').src = lastConversionData.preprocessing.mask_b64;
+      }
+
+      // Populate stats cards
+      const ext = item.bbox_extents || [1, 1, 1];
+      document.getElementById('modal3DStatsGrid').innerHTML = `
+        <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <span class="text-[10px] text-slate-400 block">Kiến trúc Decoder</span>
+          <strong class="text-sky-400">${item.decoder}</strong>
+        </div>
+        <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <span class="text-[10px] text-slate-400 block">2D Backbone</span>
+          <strong class="text-slate-200">${item.backbone}</strong>
+        </div>
+        <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <span class="text-[10px] text-slate-400 block">Số đỉnh / Mặt tam giác</span>
+          <strong class="text-slate-200">${item.num_vertices} đỉnh / ${item.num_faces} mặt</strong>
+        </div>
+        <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <span class="text-[10px] text-slate-400 block">Tốc độ / Tham số</span>
+          <strong class="text-emerald-400">${item.latency_ms} ms (${item.params_m}M)</strong>
+        </div>
+        <div class="col-span-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800">
+          <span class="text-[10px] text-slate-400 block">Kích thước Khung bao 3D (ΔX × ΔY × ΔZ)</span>
+          <strong class="text-slate-200">${ext[0]} × ${ext[1]} × ${ext[2]} (Canonical Space)</strong>
+        </div>
+      `;
+
+      // Update Download URLs
+      document.getElementById('dlLinkObj').href = item.downloads.obj;
+      document.getElementById('dlLinkGlb').href = item.downloads.glb;
+      document.getElementById('dlLinkStl').href = item.downloads.stl;
+      document.getElementById('dlLinkPly').href = item.downloads.ply;
+
+      setTimeout(() => initModal3DViewer(item), 30);
+    }
+
+    function initModal3DViewer(item) {
+      const host = document.getElementById('modal3DCanvasHost');
+      host.innerHTML = '';
+      if (modalAnimId) cancelAnimationFrame(modalAnimId);
+      if (modalRenderer) modalRenderer.dispose();
+
+      const w = host.clientWidth || 720;
+      const h = host.clientHeight || 540;
+
+      modalScene = new THREE.Scene();
+      modalCamera = new THREE.PerspectiveCamera(42, w / h, 0.05, 100);
+      modalCamera.position.set(1.8, 1.35, 2.2);
+
+      modalRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      modalRenderer.setSize(w, h);
+      modalRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      host.appendChild(modalRenderer.domElement);
+
+      modalControls = new THREE.OrbitControls(modalCamera, modalRenderer.domElement);
+      modalControls.enableDamping = true;
+      modalControls.dampingFactor = 0.06;
+      modalControls.autoRotate = true;
+      modalControls.autoRotateSpeed = 1.5;
+
+      // Multi-point studio lights
+      modalScene.add(new THREE.AmbientLight(0xffffff, 0.65));
+      const keyLight = new THREE.DirectionalLight(0xffffff, 0.95);
+      keyLight.position.set(4, 6, 5);
+      modalScene.add(keyLight);
+
+      const fillLight = new THREE.DirectionalLight(0x38bdf8, 0.45);
+      fillLight.position.set(-5, 2, -4);
+      modalScene.add(fillLight);
+
+      const rimLight = new THREE.DirectionalLight(0x818cf8, 0.35);
+      rimLight.position.set(0, -5, 3);
+      modalScene.add(rimLight);
+
+      // Floor grid & axes
+      const grid = new THREE.GridHelper(2.6, 12, 0x38bdf8, 0x1e293b);
+      grid.position.y = -0.95;
+      modalScene.add(grid);
+
+      rebuildModalMeshObjects();
+
+      function animateModal() {
+        modalAnimId = requestAnimationFrame(animateModal);
+        if (modalControls) modalControls.update();
+        if (modalRenderer && modalScene && modalCamera) {
+          modalRenderer.render(modalScene, modalCamera);
+        }
+      }
+      animateModal();
+    }
+
+    function rebuildModalMeshObjects() {
+      if (!modalScene || !modalCurrentResult) return;
+      if (modalMeshGroup) {
+        modalScene.remove(modalMeshGroup);
+      }
+
+      const geometry = buildThreeGeometryFromResult(modalCurrentResult);
+      modalMeshGroup = new THREE.Group();
+
+      let mainMat;
+      if (modalShadingMode === 'normal') {
+        mainMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+      } else if (modalShadingMode === 'metal') {
+        mainMat = new THREE.MeshStandardMaterial({
+          color: 0xe2e8f0,
+          metalness: 0.72,
+          roughness: 0.22,
+          side: THREE.DoubleSide,
+        });
+      } else {
+        mainMat = new THREE.MeshStandardMaterial({
+          color: 0x38bdf8,
+          metalness: 0.15,
+          roughness: 0.4,
+          side: THREE.DoubleSide,
+        });
+      }
+
+      const solidMesh = new THREE.Mesh(geometry, mainMat);
+      modalMeshGroup.add(solidMesh);
+
+      if (modalShowWireframe) {
+        const wireMat = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          wireframe: true,
+          transparent: true,
+          opacity: 0.35,
+        });
+        modalMeshGroup.add(new THREE.Mesh(geometry, wireMat));
+      }
+
+      if (modalShowPoints) {
+        const ptsMat = new THREE.PointsMaterial({
+          color: 0xfacc15,
+          size: 0.032,
+        });
+        modalMeshGroup.add(new THREE.Points(geometry, ptsMat));
+      }
+
+      modalScene.add(modalMeshGroup);
+    }
+
+    function setModalShadingMode(mode) {
+      modalShadingMode = mode;
+      ['Clay', 'Normal', 'Metal'].forEach(m => {
+        const btn = document.getElementById('btnMode' + m);
+        if (m.toLowerCase() === mode) {
+          btn.className = 'px-2.5 py-1 rounded-lg bg-sky-600 text-white text-xs font-medium transition';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition';
+        }
+      });
+      rebuildModalMeshObjects();
+    }
+
+    function toggleModalWireframe() {
+      modalShowWireframe = !modalShowWireframe;
+      document.getElementById('btnModalWire').className = modalShowWireframe
+        ? 'px-2.5 py-1 rounded-lg bg-sky-600 text-white text-xs font-medium transition'
+        : 'px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition';
+      rebuildModalMeshObjects();
+    }
+
+    function toggleModalPoints() {
+      modalShowPoints = !modalShowPoints;
+      document.getElementById('btnModalPoints').className = modalShowPoints
+        ? 'px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 text-xs font-bold transition'
+        : 'px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition';
+      rebuildModalMeshObjects();
+    }
+
+    function resetModalCamera() {
+      if (modalCamera && modalControls) {
+        modalCamera.position.set(1.8, 1.35, 2.2);
+        modalControls.target.set(0, 0, 0);
+        modalControls.update();
+      }
+    }
+
+    function close3DDetailModal() {
+      const modal = document.getElementById('modal3DDetail');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      if (modalAnimId) cancelAnimationFrame(modalAnimId);
+    }
+
+    // ------------------- DIALOG 2: SERVER SPECIFICATIONS MODAL -------------------
+    async function openServerSpecsModal() {
+      const modal = document.getElementById('modalServerSpecs');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      await refreshServerSpecs(false);
+    }
+
+    function closeServerSpecsModal() {
+      const modal = document.getElementById('modalServerSpecs');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    async function refreshServerSpecs(silentHeaderOnly = false) {
+      try {
+        const res = await fetch('/api/system-specs');
+        const s = await res.json();
+
+        // Update top header badge
+        const devText = document.getElementById('headerDeviceText');
+        if (s.gpu && s.gpu.cuda_available && s.gpu.devices.length > 0) {
+          devText.textContent = `${s.gpu.devices[0].name} (${s.gpu.devices[0].total_vram_mb} MB)`;
+        } else {
+          devText.textContent = `${s.gpu.active_device} | RAM ${s.ram.total_gb} GB`;
+        }
+
+        if (silentHeaderOnly) return;
+
+        document.getElementById('serverTimestamp').textContent =
+          `Host: ${s.hostname} • Cập nhật lúc: ${s.timestamp}`;
+
+        let gpuHtml = '';
+        if (s.gpu.cuda_available && s.gpu.devices.length > 0) {
+          gpuHtml = s.gpu.devices.map(g => `
+            <div class="bg-slate-950 p-3 rounded-xl border border-emerald-500/30 space-y-1.5">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-emerald-400">GPU #${g.index}: ${g.name}</span>
+                <span class="text-[11px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">CUDA ${s.gpu.cuda_version} (CC ${g.compute_capability})</span>
+              </div>
+              <div class="text-slate-300">
+                Tổng VRAM: <strong>${g.total_vram_mb} MB</strong> &nbsp;|&nbsp;
+                Đang cấp phát: <strong>${g.allocated_vram_mb} MB</strong> &nbsp;|&nbsp;
+                Reserved: <strong>${g.reserved_vram_mb} MB</strong>
+              </div>
+            </div>
+          `).join('');
+        } else {
+          gpuHtml = `
+            <div class="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+              <div>
+                <div class="font-semibold text-amber-300">Chế độ Suy luận CPU (${s.gpu.active_device})</div>
+                <div class="text-[11px] text-slate-400">PyTorch ${s.os.pytorch_version} • Tối ưu hóa cho các mô hình nhẹ GeoAttMesh-Lite</div>
+              </div>
+              <span class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 text-[11px]">CUDA: False</span>
+            </div>
+          `;
+        }
+
+        const disksHtml = (s.disks || []).map(d => `
+          <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-1">
+            <div class="flex justify-between font-medium">
+              <span class="text-slate-200">Ổ đĩa ${d.mountpoint} (${d.fstype})</span>
+              <span class="text-sky-400">${d.used_gb} / ${d.total_gb} GB (${d.percent}%)</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div class="h-full bg-sky-500" style="width: ${Math.min(100, d.percent)}%"></div>
+            </div>
+            <div class="text-[10px] text-slate-400">Còn trống: ${d.free_gb} GB</div>
+          </div>
+        `).join('');
+
+        document.getElementById('serverSpecsBody').innerHTML = `
+          <!-- CPU & RAM Cards -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-800/70 p-3.5 rounded-xl border border-slate-700 space-y-2">
+              <div class="text-sky-400 font-bold uppercase text-[11px]">Bộ Vi Xử Lý (CPU)</div>
+              <div class="font-semibold text-white text-xs">${s.cpu.brand}</div>
+              <div class="text-slate-300">
+                Số nhân vật lý: <strong>${s.cpu.physical_cores} Cores</strong> &nbsp;|&nbsp;
+                Luồng logic: <strong>${s.cpu.logical_threads} Threads</strong>
+              </div>
+              <div class="text-slate-300">
+                Xung nhịp: <strong>${s.cpu.current_freq_mhz} MHz</strong> &nbsp;|&nbsp;
+                Tải hiện tại: <strong class="text-emerald-400">${s.cpu.usage_percent}%</strong>
+              </div>
+              <div class="w-full h-2 bg-slate-950 rounded-full overflow-hidden">
+                <div class="h-full bg-emerald-500 transition-all" style="width: ${Math.min(100, s.cpu.usage_percent)}%"></div>
+              </div>
+            </div>
+
+            <div class="bg-slate-800/70 p-3.5 rounded-xl border border-slate-700 space-y-2">
+              <div class="text-sky-400 font-bold uppercase text-[11px]">Bộ Nhớ Hệ Thống (RAM)</div>
+              <div class="font-semibold text-white text-xs">Tổng dung lượng: ${s.ram.total_gb} GB</div>
+              <div class="text-slate-300">
+                Đang sử dụng: <strong>${s.ram.used_gb} GB (${s.ram.percent}%)</strong>
+              </div>
+              <div class="text-slate-300">
+                Khả dụng (Available): <strong class="text-emerald-400">${s.ram.available_gb} GB</strong>
+              </div>
+              <div class="w-full h-2 bg-slate-950 rounded-full overflow-hidden">
+                <div class="h-full bg-sky-500 transition-all" style="width: ${Math.min(100, s.ram.percent)}%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- GPU / Accelerator -->
+          <div class="bg-slate-800/70 p-3.5 rounded-xl border border-slate-700 space-y-2">
+            <div class="text-sky-400 font-bold uppercase text-[11px]">Card Đồ Họa &amp; Thiết Bị Tính Toán (GPU / Accelerator)</div>
+            ${gpuHtml}
+          </div>
+
+          <!-- OS & Runtime Environment -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div class="bg-slate-800/70 p-3.5 rounded-xl border border-slate-700 space-y-1.5">
+              <div class="text-sky-400 font-bold uppercase text-[11px]">Hệ Điều Hành &amp; Môi Trường</div>
+              <div>Hệ điều hành: <strong>${s.os.system} ${s.os.release} (${s.os.machine})</strong></div>
+              <div>Phiên bản OS: <span class="text-slate-400">${s.os.version}</span></div>
+              <div>Python: <strong>${s.os.python_version}</strong> &nbsp;|&nbsp; PyTorch: <strong>${s.os.pytorch_version}</strong></div>
+            </div>
+
+            <div class="bg-slate-800/70 p-3.5 rounded-xl border border-slate-700 space-y-1.5">
+              <div class="text-sky-400 font-bold uppercase text-[11px]">Trạng Thái Studio Server</div>
+              <div class="truncate" title="${s.studio.repo_path}">Repo: <strong>${s.studio.repo_path}</strong></div>
+              <div>Models đã đăng ký: <strong>${s.studio.registered_models_count} models</strong> (Trong RAM Cache: <strong>${s.studio.cached_models_in_ram}</strong>)</div>
+              <div>Lưới mẫu: <strong>${s.studio.template_mesh}</strong></div>
+            </div>
+          </div>
+
+          <!-- Disks -->
+          <div class="bg-slate-800/70 p-3.5 rounded-xl border border-slate-700 space-y-2">
+            <div class="text-sky-400 font-bold uppercase text-[11px]">Dung Lượng Các Phân Vùng Ổ Đĩa</div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              ${disksHtml}
+            </div>
+          </div>
+        `;
+      } catch (err) {
+        console.error('Error fetching system specs:', err);
+      }
+    }
+
+    // Close modals on Escape key
+    window.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        close3DDetailModal();
+        closeServerSpecsModal();
+      }
+    });
+  </script>
+</body>
+</html>
