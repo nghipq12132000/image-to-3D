@@ -133,12 +133,11 @@ def register_checkpoint_file(pt_path: str, fast_scan: bool = True) -> Optional[d
 
 
 def auto_discover_initial_models():
-    """Fast-scans local models/imported and default Session 2 directory on startup."""
-    for folder in [IMPORTED_MODELS_DIR, DEFAULT_SESSION2_DIR]:
-        if os.path.exists(folder):
-            for fname in sorted(os.listdir(folder)):
-                if fname.lower().endswith((".pt", ".pth")):
-                    register_checkpoint_file(os.path.join(folder, fname), fast_scan=True)
+    """Fast-scans local models/imported directory on startup if any models were imported."""
+    if os.path.exists(IMPORTED_MODELS_DIR):
+        for fname in sorted(os.listdir(IMPORTED_MODELS_DIR)):
+            if fname.lower().endswith((".pt", ".pth")):
+                register_checkpoint_file(os.path.join(IMPORTED_MODELS_DIR, fname), fast_scan=True)
 
 
 auto_discover_initial_models()
@@ -260,13 +259,9 @@ async def get_system_specs():
 
 @app.get("/api/models")
 async def list_models():
-    """Returns all registered 3D reconstruction models and preset folder paths."""
+    """Returns all registered 3D reconstruction models."""
     return {
-        "models": list(MODEL_REGISTRY.values()),
-        "presets": {
-            "session2_dir": DEFAULT_SESSION2_DIR if os.path.exists(DEFAULT_SESSION2_DIR) else "",
-            "session1_dir": DEFAULT_SESSION1_DIR if os.path.exists(DEFAULT_SESSION1_DIR) else "",
-        }
+        "models": list(MODEL_REGISTRY.values())
     }
 
 

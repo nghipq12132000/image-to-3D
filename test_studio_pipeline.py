@@ -30,8 +30,18 @@ async def run_verification():
     print("\n=== 2. TESTING MODEL REGISTRY & AUTO-INSPECTOR ===")
     m_res = await list_models()
     models = m_res["models"]
+    if len(models) == 0:
+        print("  Startup models is 0 as expected (auto-discovery disabled). Loading test models...")
+        from app import register_checkpoint_file
+        test_dir = r"G:\My Drive\Colab Notebooks\ChuyenDe_TGMT\Bài tập nhóm 2\notebook\training\session2\saved_models"
+        if os.path.exists(test_dir):
+            for fname in sorted(os.listdir(test_dir)):
+                if fname.lower().endswith((".pt", ".pth")):
+                    register_checkpoint_file(os.path.join(test_dir, fname), fast_scan=True)
+            m_res = await list_models()
+            models = m_res["models"]
     print(f"  Total registered models: {len(models)}")
-    assert len(models) > 0, "Expected at least 1 registered model from Session 2!"
+    assert len(models) > 0, "Expected at least 1 registered model for test!"
     for m in models[:4]:
         print(f"    - {m['name']} | {m['session_label']} | {m['backbone']} | {m['decoder']} | {m['params_m']}M")
 
